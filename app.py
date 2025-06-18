@@ -2,7 +2,7 @@ from flask import Flask, request, jsonify
 import random
 import re
 
-app = Flask(_name_)
+app = Flask(__name__)
 
 # Emojis
 FULL_YELLOW = "<:ystar:1214063559076749312>"
@@ -84,5 +84,5 @@ def skill_up():
 def home():
     return "Skill Up API Online"
 
-if _name_ == "_main_":
+if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
