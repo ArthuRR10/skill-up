@@ -20,28 +20,40 @@ EMOJI_TO_VALUE = {
 # Regex para identificar os emojis da NLEDF
 EMOJI_PATTERN = re.compile(r'<:[a-zA-Z0-9_]+:[0-9]+>')
 
-def value_to_emojis(yellow: float, gray: float) -> str:
-    result = []
-    while yellow >= 1.0:
-        result.append(FULL_YELLOW)
-        yellow -= 1.0
-    if yellow >= 0.5:
-        result.append(HALF_YELLOW)
-    while gray >= 1.0:
-        result.append(FULL_GRAY)
-        gray -= 1.0
-    if gray >= 0.5:
-        result.append(HALF_GRAY)
-    return ''.join(result)
+# Mensagens possíveis de treino
+TRAINING_MESSAGES = [
+    "Um treino espetacular, chamou atenção de todos os olheiros presentes.",
+    "Treino sólido, os fundamentos foram reforçados com sucesso.",
+    "Dedicado e concentrado, evoluiu bem em aspectos táticos.",
+    "Mostrou evolução clara na leitura de jogo.",
+    "Teve um desempenho excelente no treino de finalizações.",
+    "Trabalho mental exemplar durante o treino.",
+    "Impressionou os treinadores com visão de jogo.",
+    "Se destacou entre os colegas com intensidade e foco.",
+    "Treino físico de altíssimo nível, evolução clara.",
+    "Grande progresso na tomada de decisão.",
+    "Mostrou raça, vontade e aprendeu rápido.",
+    "Dificuldades no início, mas terminou com bons resultados.",
+    "Superou as expectativas em fundamentos defensivos.",
+    "Chute calibrado e força física melhorada.",
+    "Visão de jogo mais afiada após o treino tático.",
+    "Trabalho em grupo excelente, entrosamento subiu.",
+    "Teve paciência e absorveu bem o que foi passado.",
+    "Cresceu muito no 1 contra 1.",
+    "Mostrou que tem potencial para liderar em campo.",
+    "Dominou o treino e saiu ovacionado pelos colegas."
+]
 
 @app.route("/skill-up", methods=["POST"])
 def skill_up():
     data = request.form
 
     stars_raw = data.get("stars", "")
+    print("RAW stars string:", stars_raw)  # Debug print
 
     # Extrai todos os emojis válidos, mesmo se grudados
     stars = EMOJI_PATTERN.findall(stars_raw)
+    print("Parsed emojis:", stars)  # Debug print
 
     yellow = 0.0
     gray = 0.0
@@ -75,9 +87,15 @@ def skill_up():
         gray -= 0.5
         evolved += 0.5
 
+    if evolved == 0.0:
+        message = "Apesar do esforço, o jogador apenas ganhou experiência e não conseguiu converter estrelas."
+    else:
+        message = random.choice(TRAINING_MESSAGES)
+
     return jsonify({
         "updated_stars": value_to_emojis(yellow, gray),
-        "evolved": evolved
+        "evolved": evolved,
+        "message": message
     })
 
 @app.route("/")
