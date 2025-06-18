@@ -32,9 +32,10 @@ def value_to_emojis(yellow: float, gray: float) -> str:
 
 @app.route("/skill-up", methods=["POST"])
 def skill_up():
-    data = request.form  # <-- Aqui é o que muda
+    data = request.form  # <- Alterado aqui
 
-    stars_input = data.get("stars")
+    stars = data.get("stars", "")
+    stars = stars.strip().split()  # Transforma a string de emojis em uma lista
 
     yellow = 0.0
     gray = 0.0
@@ -43,7 +44,7 @@ def skill_up():
         val = EMOJI_TO_VALUE.get(e, 0)
         if e in [FULL_YELLOW, HALF_YELLOW]:
             yellow += val
-        else:
+        elif e in [FULL_GRAY, HALF_GRAY]:
             gray += val
 
     if yellow >= 5.0:
@@ -78,4 +79,4 @@ def home():
     return "Skill Up API Online"
 
 if __name__ == "__main__":
-    app.run(host='0.0.0.0', port=8080)
+    app.run(host="0.0.0.0", port=8080)
