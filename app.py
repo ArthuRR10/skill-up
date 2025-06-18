@@ -32,7 +32,7 @@ def value_to_emojis(yellow: float, gray: float) -> str:
 
 @app.route("/skill-up", methods=["POST"])
 def skill_up():
-    data = request.json
+    data = request.form
     stars = data.get("stars")  # Lista de emojis
 
     yellow = 0.0
