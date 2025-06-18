@@ -1,7 +1,8 @@
 from flask import Flask, request, jsonify
 import random
+import re
 
-app = Flask(__name__)
+app = Flask(_name_)
 
 # Emojis
 FULL_YELLOW = "<:ystar:1214063559076749312>"
@@ -15,6 +16,9 @@ EMOJI_TO_VALUE = {
     FULL_GRAY: 1.0,
     HALF_GRAY: 0.5
 }
+
+# Regex para identificar os emojis da NLEDF
+EMOJI_PATTERN = re.compile(r'<:[a-zA-Z0-9_]+:[0-9]+>')
 
 def value_to_emojis(yellow: float, gray: float) -> str:
     result = []
@@ -32,10 +36,12 @@ def value_to_emojis(yellow: float, gray: float) -> str:
 
 @app.route("/skill-up", methods=["POST"])
 def skill_up():
-    data = request.form  # <- Alterado aqui
+    data = request.form
 
-    stars = data.get("stars", "")
-    stars = stars.strip().split()  # Transforma a string de emojis em uma lista
+    stars_raw = data.get("stars", "")
+
+    # Extrai todos os emojis válidos, mesmo se grudados
+    stars = EMOJI_PATTERN.findall(stars_raw)
 
     yellow = 0.0
     gray = 0.0
@@ -78,5 +84,5 @@ def skill_up():
 def home():
     return "Skill Up API Online"
 
-if __name__ == "__main__":
+if _name_ == "_main_":
     app.run(host="0.0.0.0", port=8080)
