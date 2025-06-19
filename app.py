@@ -17,7 +17,7 @@ EMOJI_TO_VALUE = {
     HALF_YELLOW: 0.5,
     FULL_GRAY:   1.0,
     HALF_GRAY:   0.5,
-    HALF_MIXED:  0.5  # conta como 0.5 de cinza e 0.5 de amarelo
+    HALF_MIXED:  0.5  # conta como 0.5 amarelo e 0.5 cinza
 }
 
 # Regex para capturar qualquer emoji no formato <:nome:id>
@@ -64,36 +64,36 @@ MENSAGENS_SEM_EVOLUCAO = [
 def value_to_emojis(yellow: float, gray: float) -> str:
     """
     Converte valores float de amarelas e cinzas em sequência de emojis,
-    combinando 0.5+0.5 em HALF_MIXED sempre que possível.
+    usando HALF_MIXED apenas quando houver 0.5 amarelo e 0.5 cinza sobressalentes.
     """
     result = []
-    # combinações de meia amarela + meia cinza em um único emoji
-    while yellow >= 0.5 and gray >= 0.5:
+
+    # Separar inteiras e frações
+    full_yellow = int(yellow)
+    full_gray = int(gray)
+    rem_yellow = round(yellow - full_yellow, 2)
+    rem_gray = round(gray - full_gray, 2)
+
+    # Adiciona inteiras
+    result.extend([FULL_YELLOW] * full_yellow)
+    result.extend([FULL_GRAY] * full_gray)
+
+    # Se tiver 0.5 de cada, usa HALF_MIXED
+    if rem_yellow >= 0.5 and rem_gray >= 0.5:
         result.append(HALF_MIXED)
-        yellow -= 0.5
-        gray   -= 0.5
+        rem_yellow -= 0.5
+        rem_gray -= 0.5
 
-    # estrelas amarelas cheias
-    while yellow >= 1.0:
-        result.append(FULL_YELLOW)
-        yellow -= 1.0
-    # meia estrela amarela
-    if yellow >= 0.5:
+    # Resto individual
+    if rem_yellow >= 0.5:
         result.append(HALF_YELLOW)
-
-    # estrelas cinza cheias
-    while gray >= 1.0:
-        result.append(FULL_GRAY)
-        gray -= 1.0
-    # meia estrela cinza
-    if gray >= 0.5:
+    if rem_gray >= 0.5:
         result.append(HALF_GRAY)
 
     return ''.join(result)
 
 @app.route("/skill-up", methods=["POST"])
 def skill_up():
-    # lê JSON
     payload = request.get_json(force=True, silent=True)
     if not payload or "stars" not in payload:
         return jsonify({"error": "Envie JSON: { \"stars\": \"<seu string de emojis>\" }"}), 400
@@ -101,23 +101,19 @@ def skill_up():
     stars_raw = payload["stars"]
     print("DEBUG: recebido stars_raw =", stars_raw)
 
-    # extrai emojis
     emojis = EMOJI_PATTERN.findall(stars_raw)
 
     yellow = gray = 0.0
-    # acumula valores
     for e in emojis:
-        val = EMOJI_TO_VALUE.get(e, 0)
-        # se e meia mista, conta meio em cada
         if e == HALF_MIXED:
             yellow += 0.5
-            gray   += 0.5
+            gray += 0.5
         elif e in (FULL_YELLOW, HALF_YELLOW):
-            yellow += val
+            yellow += EMOJI_TO_VALUE.get(e, 0)
         else:
-            gray += val
+            gray += EMOJI_TO_VALUE.get(e, 0)
 
-    # limite máximo
+    # Limite
     if yellow >= 5.0:
         return jsonify({
             "message": "❗ Este jogador já possui 5 estrelas amarelas — não há mais evolução possível.",
@@ -125,31 +121,27 @@ def skill_up():
             "evolved": 0
         })
 
-    # sorteio do outcome
-    outcome = random.choices([1.5, 0.5, 0], weights=[25,50,25], k=1)[0]
+    # Evolução sorteada
+    outcome = random.choices([1.5, 0.5, 0], weights=[25, 50, 25], k=1)[0]
     evolved = 0.0
 
-    # converte cinza → amarelo
     while outcome >= 1.0 and gray >= 1.0 and yellow < 5.0:
         yellow += 1.0
-        gray   -= 1.0
+        gray -= 1.0
         evolved += 1.0
         outcome -= 1.0
 
     if outcome >= 0.5 and gray >= 0.5 and yellow < 5.0:
         yellow += 0.5
-        gray   -= 0.5
+        gray -= 0.5
         evolved += 0.5
 
-    # escolhe mensagem
-    msg = (random.choice(MENSAGENS_TREINO)
-           if evolved > 0
-           else random.choice(MENSAGENS_SEM_EVOLUCAO))
+    msg = random.choice(MENSAGENS_TREINO) if evolved > 0 else random.choice(MENSAGENS_SEM_EVOLUCAO)
 
     return jsonify({
-        "message":       msg,
+        "message": msg,
         "updated_stars": value_to_emojis(yellow, gray),
-        "evolved":       evolved
+        "evolved": evolved
     })
 
 @app.route("/")
