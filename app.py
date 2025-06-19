@@ -6,23 +6,25 @@ app = Flask(__name__)
 
 # Emojis
 FULL_YELLOW = "<:ystar:1214063559076749312>"
-FULL_GRAY   = "<:sstar:1214063700886036532>"
 HALF_YELLOW = "<:mystar:1214063655646138408>"
+HALF_MIXED  = "<:ysstar:1216072160959922209>"  # nova
+FULL_GRAY   = "<:sstar:1214063700886036532>"
 HALF_GRAY   = "<:msstar:1216072572924596276>"
-HALF_MIXED  = "<:ysstar:1216072160959922209>"
 
+# Map emoji → valor
 EMOJI_TO_VALUE = {
     FULL_YELLOW: 1.0,
     HALF_YELLOW: 0.5,
+    HALF_MIXED:  1.0,  # conta como amarela
     FULL_GRAY:   1.0,
-    HALF_GRAY:   0.5,
-    HALF_MIXED:  0.5
+    HALF_GRAY:   0.5
 }
 
+# Regex para extrair emojis
 EMOJI_PATTERN = re.compile(r'<:[a-zA-Z0-9_]+:[0-9]+>')
 
-MENSAGENS_TREINO = [
-    "O treino de finalização foi um sucesso e você surpreendeu a comissão técnica!",
+# Frases de treino
+MENSAGENS_TREINO = ["O treino de finalização foi um sucesso e você surpreendeu a comissão técnica!",
     "Após horas batendo bola, aquele toque de classe apareceu!",
     "Chutes certeiros: você deixou todo mundo de queixo caído!",
     "A bola parecia colada no seu pé durante o treino.",
@@ -41,11 +43,9 @@ MENSAGENS_TREINO = [
     "Você ditou o ritmo no treino de chute.",
     "Chute certeiro virou rotina hoje — parabéns!",
     "O gol imaginário virou realidade no treino.",
-    "Hoje foi dia de mostrar faro de artilheiro."
-]
+    "Hoje foi dia de mostrar faro de artilheiro."]
 
-MENSAGENS_SEM_EVOLUCAO = [
-    "O treino foi pesado, mas ainda não trouxe evolução nas estrelas.",
+MENSAGENS_SEM_EVOLUCAO = ["O treino foi pesado, mas ainda não trouxe evolução nas estrelas.",
     "Você aprendeu muito, mas as estrelas ainda não mudaram.",
     "Hora de fortalecer a base: sem evolução de estrelas hoje.",
     "Treino produtivo em resistência, mas sem upgrade de estrelas.",
@@ -54,82 +54,84 @@ MENSAGENS_SEM_EVOLUCAO = [
     "Você suou a camisa, mas as estrelas ficaram no mesmo lugar.",
     "Foco no preparo físico hoje, estrelas continuam as mesmas.",
     "Mais experiência no corpinho, evolução de estrelas fica pra próxima.",
-    "Treino mental e tático faz parte, sem alteração de estrelas."
-]
+    "Treino mental e tático faz parte, sem alteração de estrelas."]
+
+def value_to_emojis(yellow: float, gray: float, used_mixed: bool = False) -> str:
+    result = []
+    full_y = int(yellow)
+    half_y = 1 if yellow - full_y >= 0.5 else 0
+    full_g = int(gray)
+    half_g = 1 if gray - full_g >= 0.5 else 0
+
+    for _ in range(full_y):
+        result.append(FULL_YELLOW)
+    if half_y:
+        result.append(HALF_MIXED if used_mixed else HALF_YELLOW)
+    for _ in range(full_g):
+        result.append(FULL_GRAY)
+    if half_g:
+        result.append(HALF_GRAY)
+
+    return ''.join(result)
 
 @app.route("/skill-up", methods=["POST"])
 def skill_up():
-    payload = request.get_json(force=True, silent=True)
-    if not payload or "stars" not in payload:
-        return jsonify({"error": "Envie JSON: { \"stars\": \"<seu string de emojis>\" }"}), 400
+    data = request.get_json(force=True, silent=True)
+    if not data or "stars" not in data:
+        return jsonify({"error": "Envie um JSON com { 'stars': '<emoji_string>' }"}), 400
 
-    stars_raw = payload["stars"]
-    print("DEBUG: recebido stars_raw =", stars_raw)
+    raw = data["stars"]
+    emojis = EMOJI_PATTERN.findall(raw)
 
-    emojis = EMOJI_PATTERN.findall(stars_raw)
     yellow = 0.0
     gray = 0.0
+    half_cinza_virou_ys = False
 
-    emoji_list = []
     for e in emojis:
-        if e == HALF_MIXED:
-            yellow += 0.5
-            gray += 0.5
-            emoji_list.append("mixed")
-        elif e in (FULL_YELLOW, HALF_YELLOW):
-            yellow += EMOJI_TO_VALUE.get(e, 0)
-            emoji_list.append(e)
-        else:
-            gray += EMOJI_TO_VALUE.get(e, 0)
-            emoji_list.append(e)
+        val = EMOJI_TO_VALUE.get(e, 0)
+        if e in [FULL_YELLOW, HALF_YELLOW, HALF_MIXED]:
+            yellow += val
+        elif e in [FULL_GRAY, HALF_GRAY]:
+            gray += val
 
     if yellow >= 5.0:
         return jsonify({
-            "message": "❗ Este jogador já possui 5 estrelas amarelas — não há mais evolução possível.",
-            "updated_stars": ''.join(emojis),
+            "message": "❗ Este jogador já tem 5 estrelas amarelas — não pode evoluir mais!",
+            "updated_stars": value_to_emojis(yellow, gray),
             "evolved": 0
         })
 
-    outcome = random.choices([1.5, 0.5, 0], weights=[25, 50, 25], k=1)[0]
+    # Sorteio
+    outcome = random.choices(
+        population=[0, 0.5, 1.0, 1.5, 2.0],
+        weights=[20, 30, 25, 15, 10],
+        k=1
+    )[0]
+
     evolved = 0.0
-    updated = []
+    while outcome >= 1.0 and gray >= 1.0 and yellow < 5.0:
+        yellow += 1.0
+        gray -= 1.0
+        evolved += 1.0
+        outcome -= 1.0
 
-    for i, e in enumerate(emoji_list):
-        if evolved >= outcome:
-            break
-        if yellow >= 5.0:
-            break
-        if e == FULL_GRAY:
-            yellow += 1.0
-            gray -= 1.0
-            evolved += 1.0
-            emoji_list[i] = FULL_YELLOW
-        elif e == HALF_GRAY and outcome - evolved >= 0.5:
-            yellow += 0.5
-            gray -= 0.5
-            evolved += 0.5
-            emoji_list[i] = HALF_MIXED
+    if outcome >= 0.5 and gray >= 0.5 and yellow < 5.0:
+        yellow += 0.5
+        gray -= 0.5
+        evolved += 0.5
+        half_cinza_virou_ys = True
 
-    updated_str = ''.join([
-        FULL_YELLOW if e == FULL_YELLOW else
-        HALF_YELLOW if e == HALF_YELLOW else
-        FULL_GRAY if e == FULL_GRAY else
-        HALF_GRAY if e == HALF_GRAY else
-        HALF_MIXED if e == HALF_MIXED or e == "mixed" else e
-        for e in emoji_list
-    ])
-
-    msg = random.choice(MENSAGENS_TREINO) if evolved > 0 else random.choice(MENSAGENS_SEM_EVOLUCAO)
+    msg = random.choice(MENSAGENS_TREINO if evolved > 0 else MENSAGENS_SEM_EVOLUCAO)
 
     return jsonify({
         "message": msg,
-        "updated_stars": updated_str,
+        "updated_stars": value_to_emojis(yellow, gray, half_cinza_virou_ys),
         "evolved": evolved
     })
 
 @app.route("/")
 def home():
-    return "Skill Up API Online"
+    return "✅ Skill Up API Online – Versão Final"
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
