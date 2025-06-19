@@ -14,14 +14,14 @@ HALF_GRAY   = "<:msstar:1216072572924596276>"
 EMOJI_TO_VALUE = {
     FULL_YELLOW: 1.0,
     HALF_YELLOW: 0.5,
-    HALF_MIXED:  1.0,  # Conta como amarela
+    HALF_MIXED:  1.0,  # conta como 1 amarela
     FULL_GRAY:   1.0,
     HALF_GRAY:   0.5
 }
 
 EMOJI_PATTERN = re.compile(r'<:[a-zA-Z0-9_]+:[0-9]+>')
 
-MENSAGENS_TREINO = [  # ... mantém as 20 frases que você já tinha
+MENSAGENS_TREINO = [
     "O treino de finalização foi um sucesso e você surpreendeu a comissão técnica!",
     "Após horas batendo bola, aquele toque de classe apareceu!",
     "Chutes certeiros: você deixou todo mundo de queixo caído!",
@@ -57,19 +57,33 @@ MENSAGENS_SEM_EVOLUCAO = [
     "Treino mental e tático faz parte, sem alteração de estrelas."
 ]
 
-def value_to_emojis(yellow: float, gray: float, use_mixed: bool = False) -> str:
+def value_to_emojis(yellow: float, gray: float, total_slots: float, used_mixed: bool) -> str:
     result = []
-    full_y = int(yellow)
-    half_y = 1 if yellow - full_y >= 0.5 else 0
-    full_g = int(gray)
-    half_g = 1 if gray - full_g >= 0.5 else 0
+    current = 0.0
 
-    result += [FULL_YELLOW] * full_y
-    if half_y:
-        result.append(HALF_MIXED if use_mixed else HALF_YELLOW)
-    result += [FULL_GRAY] * full_g
-    if half_g:
+    # Adiciona amarelas inteiras
+    while yellow >= 1.0 and current + 1.0 <= total_slots:
+        result.append(FULL_YELLOW)
+        yellow -= 1.0
+        current += 1.0
+
+    # Se sobrou meia amarela e cabe
+    if yellow >= 0.5 and current + 1.0 <= total_slots:
+        result.append(HALF_MIXED if used_mixed else HALF_YELLOW)
+        yellow -= 0.5
+        current += 1.0  # meia amarela + meia cinza = 1 slot
+
+    # Adiciona cinzas inteiras
+    while gray >= 1.0 and current + 1.0 <= total_slots:
+        result.append(FULL_GRAY)
+        gray -= 1.0
+        current += 1.0
+
+    # Meia cinza se couber
+    if gray >= 0.5 and current + 0.5 <= total_slots:
         result.append(HALF_GRAY)
+        gray -= 0.5
+        current += 0.5
 
     return ''.join(result)
 
@@ -90,52 +104,49 @@ def skill_up():
         elif e in [FULL_GRAY, HALF_GRAY]:
             gray += val
 
-    total = yellow + gray
-    if total >= 5.0:
-        return jsonify({
-            "message": "❗ Este jogador já atingiu o limite de 5 estrelas totais.",
-            "updated_stars": value_to_emojis(yellow, gray),
-            "evolved": 0
-        })
+    total_slots = yellow + gray  # slots máximos permitidos (não pode passar disso)
+    original_yellow = yellow
+    original_gray = gray
 
     # Sorteio
     outcome = random.choices([0, 0.5, 1.0, 1.5], weights=[25, 35, 25, 15])[0]
     evolved = 0.0
 
     if outcome > 0:
-        while outcome >= 1.0 and gray >= 1.0 and (yellow + gray) < 5.0:
+        while outcome >= 1.0 and gray >= 1.0:
             yellow += 1.0
             gray -= 1.0
             evolved += 1.0
             outcome -= 1.0
 
-        if outcome >= 0.5 and gray >= 0.5 and (yellow + gray) < 5.0:
+        if outcome >= 0.5 and gray >= 0.5:
             yellow += 0.5
             gray -= 0.5
             evolved += 0.5
             used_mixed = True
 
-        # Reajuste para manter total ≤ 5
-        total = yellow + gray
-        if total > 5.0:
-            excesso = total - 5.0
-            if gray >= excesso:
-                gray -= excesso
-            else:
-                yellow -= (excesso - gray)
-                gray = 0.0
+    # Corrigir se ultrapassou os slots
+    if yellow + gray > total_slots:
+        excess = (yellow + gray) - total_slots
+        if gray >= excess:
+            gray -= excess
+        else:
+            yellow -= (excess - gray)
+            gray = 0
 
-    msg = random.choice(MENSAGENS_TREINO if evolved > 0 else MENSAGENS_SEM_EVOLUCAO)
+    # Garante que o sistema nunca gera mais estrelas do que veio
+    updated = value_to_emojis(yellow, gray, total_slots, used_mixed)
+    mensagem = random.choice(MENSAGENS_TREINO if evolved > 0 else MENSAGENS_SEM_EVOLUCAO)
 
     return jsonify({
-        "message": msg,
-        "updated_stars": value_to_emojis(yellow, gray, used_mixed),
+        "message": mensagem,
+        "updated_stars": updated,
         "evolved": evolved
     })
 
 @app.route("/")
 def home():
-    return "✅ Skill Up API Online – Versão Finalizada"
+    return "✅ Skill Up API Online – Modo Conversor (sem adicionar estrelas)"
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
