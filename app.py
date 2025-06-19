@@ -18,7 +18,7 @@ EMOJI_TO_VALUE = {
     HALF_GRAY:   0.5
 }
 
-# Pega qualquer emoji do tipo <:nome:id>
+# Regex para capturar qualquer emoji no formato <:nome:id>
 EMOJI_PATTERN = re.compile(r'<:[a-zA-Z0-9_]+:[0-9]+>')
 
 # Mensagens de treino (quando evolui)
@@ -60,64 +60,80 @@ MENSAGENS_SEM_EVOLUCAO = [
 ]
 
 def value_to_emojis(yellow: float, gray: float) -> str:
-    """Converte as quantidades float de amarelas/ cinzas em emojis."""
+    """
+    Converte valores float de amarelas e cinzas em sequência de emojis.
+    """
     result = []
+    # estrelas amarelas cheias
     while yellow >= 1.0:
         result.append(FULL_YELLOW)
         yellow -= 1.0
+    # meia estrela amarela
     if yellow >= 0.5:
         result.append(HALF_YELLOW)
+    # estrelas cinza cheias
     while gray >= 1.0:
         result.append(FULL_GRAY)
         gray -= 1.0
+    # meia estrela cinza
     if gray >= 0.5:
         result.append(HALF_GRAY)
     return ''.join(result)
 
 @app.route("/skill-up", methods=["POST"])
 def skill_up():
-    payload = request.get_json(force=True)
+    # força JSON
+    payload = request.get_json(force=True, silent=True)
+    if not payload:
+        return jsonify({"error": "Envie um JSON com { \"stars\": \"<seu string de emojis>\" }"}), 400
+
     stars_raw = payload.get("stars", "")
-    
-    # DEBUG: veja no log o que chegou
-    print("DEBUG payload:", payload)
-    
-    # Extrai emojis mesmo que grudados
+    # DEBUG: imprime no log
+    print("DEBUG: recebido stars_raw =", stars_raw)
+
+    # extrai todos os emojis válidos
     emojis = EMOJI_PATTERN.findall(stars_raw)
-    
+
     yellow = 0.0
     gray   = 0.0
+
+    # acumula valores
     for e in emojis:
         val = EMOJI_TO_VALUE.get(e, 0)
         if e in (FULL_YELLOW, HALF_YELLOW):
             yellow += val
         else:
             gray += val
-    
-    # Limite de amarelas
+
+    # se já atingiu 5 amarelas
     if yellow >= 5.0:
         return jsonify({
-            "message": "❗️ Este jogador já tem 5 estrelas amarelas — não pode evoluir mais!",
+            "message": "❗ Este jogador já tem 5 estrelas amarelas — não pode evoluir mais!",
             "updated_stars": value_to_emojis(yellow, gray),
             "evolved": 0
         })
-    
-    # Chance de outcome
+
+    # sorteia resultado
     outcome = random.choices([1.5, 0.5, 0], weights=[25,50,25], k=1)[0]
     evolved = 0.0
-    
-    # Converte cinza → amarelo até outcome zerar
+
+    # converte cinza → amarelo
     while outcome >= 1.0 and gray >= 1.0 and yellow < 5.0:
-        yellow += 1.0; gray -= 1.0; evolved += 1.0; outcome -= 1.0
+        yellow += 1.0
+        gray   -= 1.0
+        evolved += 1.0
+        outcome -= 1.0
+
     if outcome >= 0.5 and gray >= 0.5 and yellow < 5.0:
-        yellow += 0.5; gray -= 0.5; evolved += 0.5
-    
-    # Monta resposta
-    if evolved > 0:
-        msg = random.choice(MENSAGENS_TREINO)
-    else:
-        msg = random.choice(MENSAGENS_SEM_EVOLUCAO)
-    
+        yellow += 0.5
+        gray   -= 0.5
+        evolved += 0.5
+
+    # escolhe mensagem
+    msg = (random.choice(MENSAGENS_TREINO)
+           if evolved > 0
+           else random.choice(MENSAGENS_SEM_EVOLUCAO))
+
     return jsonify({
         "message": msg,
         "updated_stars": value_to_emojis(yellow, gray),
@@ -129,4 +145,5 @@ def home():
     return "Skill Up API Online"
 
 if __name__ == "__main__":
+    # host e porta pedidos
     app.run(host="0.0.0.0", port=8080)
