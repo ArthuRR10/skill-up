@@ -7,24 +7,23 @@ app = Flask(__name__)
 # Emojis
 FULL_YELLOW = "<:ystar:1214063559076749312>"
 HALF_YELLOW = "<:mystar:1214063655646138408>"
-HALF_MIXED  = "<:ysstar:1216072160959922209>"  # nova
+HALF_MIXED  = "<:ysstar:1216072160959922209>"
 FULL_GRAY   = "<:sstar:1214063700886036532>"
 HALF_GRAY   = "<:msstar:1216072572924596276>"
 
-# Map emoji → valor
+# Mapeia emoji → valor
 EMOJI_TO_VALUE = {
     FULL_YELLOW: 1.0,
     HALF_YELLOW: 0.5,
-    HALF_MIXED:  1.0,  # conta como amarela
+    HALF_MIXED:  1.0,  # metade amarela metade cinza, mas conta como 1.0 amarela
     FULL_GRAY:   1.0,
     HALF_GRAY:   0.5
 }
 
-# Regex para extrair emojis
 EMOJI_PATTERN = re.compile(r'<:[a-zA-Z0-9_]+:[0-9]+>')
 
-# Frases de treino
-MENSAGENS_TREINO = ["O treino de finalização foi um sucesso e você surpreendeu a comissão técnica!",
+MENSAGENS_TREINO = [
+    "O treino de finalização foi um sucesso e você surpreendeu a comissão técnica!",
     "Após horas batendo bola, aquele toque de classe apareceu!",
     "Chutes certeiros: você deixou todo mundo de queixo caído!",
     "A bola parecia colada no seu pé durante o treino.",
@@ -43,9 +42,11 @@ MENSAGENS_TREINO = ["O treino de finalização foi um sucesso e você surpreende
     "Você ditou o ritmo no treino de chute.",
     "Chute certeiro virou rotina hoje — parabéns!",
     "O gol imaginário virou realidade no treino.",
-    "Hoje foi dia de mostrar faro de artilheiro."]
+    "Hoje foi dia de mostrar faro de artilheiro."
+]
 
-MENSAGENS_SEM_EVOLUCAO = ["O treino foi pesado, mas ainda não trouxe evolução nas estrelas.",
+MENSAGENS_SEM_EVOLUCAO = [
+    "O treino foi pesado, mas ainda não trouxe evolução nas estrelas.",
     "Você aprendeu muito, mas as estrelas ainda não mudaram.",
     "Hora de fortalecer a base: sem evolução de estrelas hoje.",
     "Treino produtivo em resistência, mas sem upgrade de estrelas.",
@@ -54,21 +55,26 @@ MENSAGENS_SEM_EVOLUCAO = ["O treino foi pesado, mas ainda não trouxe evolução
     "Você suou a camisa, mas as estrelas ficaram no mesmo lugar.",
     "Foco no preparo físico hoje, estrelas continuam as mesmas.",
     "Mais experiência no corpinho, evolução de estrelas fica pra próxima.",
-    "Treino mental e tático faz parte, sem alteração de estrelas."]
+    "Treino mental e tático faz parte, sem alteração de estrelas."
+]
 
-def value_to_emojis(yellow: float, gray: float, used_mixed: bool = False) -> str:
+def value_to_emojis(yellow: float, gray: float, half_mixed_used: bool = False) -> str:
     result = []
+    total = yellow + gray
+    yellow = min(yellow, 5.0)
+    gray = max(0.0, 5.0 - yellow)
+
     full_y = int(yellow)
     half_y = 1 if yellow - full_y >= 0.5 else 0
     full_g = int(gray)
     half_g = 1 if gray - full_g >= 0.5 else 0
 
-    for _ in range(full_y):
-        result.append(FULL_YELLOW)
+    result.extend([FULL_YELLOW] * full_y)
+
     if half_y:
-        result.append(HALF_MIXED if used_mixed else HALF_YELLOW)
-    for _ in range(full_g):
-        result.append(FULL_GRAY)
+        result.append(HALF_MIXED if half_mixed_used else HALF_YELLOW)
+
+    result.extend([FULL_GRAY] * full_g)
     if half_g:
         result.append(HALF_GRAY)
 
@@ -85,15 +91,17 @@ def skill_up():
 
     yellow = 0.0
     gray = 0.0
-    half_cinza_virou_ys = False
+    used_mixed = False
 
     for e in emojis:
         val = EMOJI_TO_VALUE.get(e, 0)
         if e in [FULL_YELLOW, HALF_YELLOW, HALF_MIXED]:
             yellow += val
-        elif e in [FULL_GRAY, HALF_GRAY]:
+        else:
             gray += val
 
+    # Limita o máximo antes da evolução
+    yellow = min(yellow, 5.0)
     if yellow >= 5.0:
         return jsonify({
             "message": "❗ Este jogador já tem 5 estrelas amarelas — não pode evoluir mais!",
@@ -101,14 +109,11 @@ def skill_up():
             "evolved": 0
         })
 
-    # Sorteio
-    outcome = random.choices(
-        population=[0, 0.5, 1.0, 1.5, 2.0],
-        weights=[20, 30, 25, 15, 10],
-        k=1
-    )[0]
-
+    # Sorteio da evolução
+    outcome = random.choices([0, 0.5, 1.0, 1.5, 2.0], weights=[20, 30, 25, 15, 10])[0]
     evolved = 0.0
+
+    # Aplica a evolução dentro dos limites
     while outcome >= 1.0 and gray >= 1.0 and yellow < 5.0:
         yellow += 1.0
         gray -= 1.0
@@ -119,19 +124,29 @@ def skill_up():
         yellow += 0.5
         gray -= 0.5
         evolved += 0.5
-        half_cinza_virou_ys = True
+        used_mixed = True
+
+    # Corrige caso ultrapasse o total de 5 estrelas
+    total_stars = yellow + gray
+    if total_stars > 5.0:
+        diff = total_stars - 5.0
+        if gray >= diff:
+            gray -= diff
+        else:
+            yellow -= (diff - gray)
+            gray = 0
 
     msg = random.choice(MENSAGENS_TREINO if evolved > 0 else MENSAGENS_SEM_EVOLUCAO)
 
     return jsonify({
         "message": msg,
-        "updated_stars": value_to_emojis(yellow, gray, half_cinza_virou_ys),
+        "updated_stars": value_to_emojis(yellow, gray, used_mixed),
         "evolved": evolved
     })
 
 @app.route("/")
 def home():
-    return "✅ Skill Up API Online – Versão Final"
+    return "✅ Skill Up API Online – Versão Estável com Limite de Estrelas"
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=8080)
